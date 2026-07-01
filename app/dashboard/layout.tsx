@@ -18,7 +18,8 @@ import {
   Loader2,
   LogOut,
   Sun,
-  Moon
+  Moon,
+  ArrowLeft
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -72,24 +73,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!user) return null;
 
-  const mainNavItems: SidebarItem[] = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, bgColor: 'bg-blue-500/10 border-blue-500/20', iconColor: 'text-blue-500 dark:text-blue-400' },
-    { name: 'AI Agent', href: '/dashboard/ai-agent', icon: Bot, bgColor: 'bg-purple-500/10 border-purple-500/20', iconColor: 'text-purple-500 dark:text-purple-400' },
-    { name: 'Briefing', href: '/dashboard/briefing', icon: FileText, bgColor: 'bg-amber-500/10 border-amber-500/20', iconColor: 'text-amber-500 dark:text-amber-400' },
-    { name: 'Integrations', href: '/dashboard/integrations', icon: LinkIcon, bgColor: 'bg-cyan-500/10 border-cyan-500/20', iconColor: 'text-cyan-500 dark:text-cyan-400' },
-    { name: 'Alerts', href: '/dashboard/alerts', icon: Bell, bgColor: 'bg-rose-500/10 border-rose-500/20', iconColor: 'text-rose-500 dark:text-rose-400' },
-    { name: 'Settings', href: '/dashboard/settings', icon: Settings, bgColor: 'bg-emerald-500/10 border-emerald-500/20', iconColor: 'text-emerald-500 dark:text-emerald-400' },
+  interface NavigationItem {
+    name: string;
+    href: string;
+    icon: React.ComponentType<any>;
+  }
+
+  interface NavigationCategory {
+    title: string;
+    items: NavigationItem[];
+  }
+
+  const navigationCategories: NavigationCategory[] = [
+    {
+      title: 'Main',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'AI Agent', href: '/dashboard/ai-agent', icon: Bot },
+      ]
+    },
+    {
+      title: 'Tools',
+      items: [
+        { name: 'Briefing', href: '/dashboard/briefing', icon: FileText },
+        { name: 'Integrations', href: '/dashboard/integrations', icon: LinkIcon },
+        { name: 'Alerts', href: '/dashboard/alerts', icon: Bell },
+      ]
+    },
+    {
+      title: 'Account',
+      items: [
+        { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+        { name: 'Pricing Settings', href: '/dashboard/pricing', icon: CreditCard },
+      ]
+    }
   ];
 
-  const bottomNavItem: SidebarItem = {
-    name: 'Pricing Settings',
-    href: '/dashboard/pricing',
-    icon: CreditCard,
-    bgColor: 'bg-violet-500/10 border-violet-500/20',
-    iconColor: 'text-violet-500 dark:text-violet-400'
+  const getActiveItemName = () => {
+    for (const cat of navigationCategories) {
+      const found = cat.items.find(item => item.href === pathname);
+      if (found) return found.name;
+    }
+    return 'Overview';
   };
 
-  const renderNavItem = (item: SidebarItem) => {
+  const renderNavItem = (item: NavigationItem) => {
     const isActive = pathname === item.href;
     const Icon = item.icon;
 
@@ -97,29 +125,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <Link
         key={item.href}
         href={item.href}
-        className={`flex items-center space-x-4 px-3 py-3 rounded-xl transition-all duration-200 border border-transparent ${
+        className={`flex items-center space-x-3.5 px-3 py-2.5 rounded-xl transition-all duration-200 ${
           isActive 
-            ? 'bg-indigo-50/50 dark:bg-white/5 border-indigo-100 dark:border-white/10 text-indigo-600 dark:text-white shadow-inner shadow-indigo-100/5 dark:shadow-white/5 font-semibold' 
-            : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-white hover:bg-indigo-50/30 dark:hover:bg-white/5'
+            ? 'bg-indigo-50/50 dark:bg-white/[0.06] text-indigo-600 dark:text-white font-medium shadow-sm' 
+            : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-white hover:bg-indigo-50/30 dark:hover:bg-white/[0.03]'
         }`}
       >
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${item.bgColor} flex-shrink-0 transition-transform duration-200 hover:scale-105`}>
-          <Icon className="w-5 h-5" />
-        </div>
+        <Icon className="w-5 h-5 flex-shrink-0" />
         {!isCollapsed && <span className="text-sm font-semibold tracking-wide">{item.name}</span>}
       </Link>
     );
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-[#030014] text-slate-900 dark:text-[#f8fafc] overflow-hidden relative">
+    <div className="flex h-screen bg-slate-50 dark:bg-[#09080e] text-slate-900 dark:text-[#f8fafc] overflow-hidden relative">
       {/* Sidebar background blurs */}
       <div className="absolute top-0 left-0 w-[300px] h-[300px] rounded-full bg-indigo-500/5 filter blur-[80px] pointer-events-none -z-10" />
       <div className="absolute bottom-0 left-0 w-[200px] h-[200px] rounded-full bg-purple-500/5 filter blur-[80px] pointer-events-none -z-10" />
 
       {/* Sidebar */}
       <aside 
-        className={`flex flex-col border-r border-slate-200 dark:border-white/5 bg-white/70 dark:bg-slate-950/40 backdrop-blur-xl h-full transition-all duration-300 ease-in-out ${
+        className={`flex flex-col border-r border-slate-200 dark:border-white/5 bg-white/70 dark:bg-[#0b0a10] h-full transition-all duration-300 ease-in-out ${
           isCollapsed ? 'w-20' : 'w-64'
         }`}
       >
@@ -139,23 +165,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Navigation Options */}
-        <nav className="flex-1 overflow-y-auto px-3 py-6 space-y-2">
-          {mainNavItems.map(renderNavItem)}
+        <nav className="flex-1 overflow-y-auto px-3 py-6 space-y-6">
+          {navigationCategories.map((category, catIdx) => (
+            <div key={category.title} className="space-y-1.5">
+              {!isCollapsed && (
+                <span className="text-[10px] font-bold text-slate-405 dark:text-slate-500 uppercase tracking-wider px-3 block">
+                  {category.title}
+                </span>
+              )}
+              <div className="space-y-1">
+                {category.items.map(renderNavItem)}
+              </div>
+              {catIdx < navigationCategories.length - 1 && (
+                <div className="border-t border-slate-200 dark:border-white/5 my-4 mx-3" />
+              )}
+            </div>
+          ))}
         </nav>
 
         {/* Sidebar Footer */}
         <div className="p-3 border-t border-slate-200 dark:border-white/5 space-y-2">
-          {renderNavItem(bottomNavItem)}
-          
           {/* Sign Out & Collapse Controls */}
           <div className="flex flex-col space-y-1">
             <button
               onClick={() => signOut()}
-              className="flex items-center space-x-4 w-full px-3 py-3 rounded-xl text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/5 transition-all duration-200 cursor-pointer"
+              className="flex items-center space-x-3.5 w-full px-3 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-500/5 transition-all duration-200 cursor-pointer"
             >
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center border border-rose-500/10 bg-rose-500/5 text-rose-400 flex-shrink-0">
-                <LogOut className="w-5 h-5" />
-              </div>
+              <LogOut className="w-5 h-5 flex-shrink-0" />
               {!isCollapsed && <span className="text-sm font-semibold tracking-wide">Sign Out</span>}
             </button>
 
@@ -173,10 +209,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         {/* Top Header bar */}
-        <header className="h-20 border-b border-slate-200 dark:border-white/5 flex items-center justify-between px-8 bg-white/40 dark:bg-slate-950/10 backdrop-blur-md">
-          <h1 className="text-xl font-bold font-display text-slate-800 dark:text-white tracking-wide">
-            {mainNavItems.find(item => item.href === pathname)?.name || bottomNavItem.name}
-          </h1>
+        <header className="h-20 border-b border-slate-200 dark:border-white/5 flex items-center justify-between px-8 bg-white/40 dark:bg-[#0b0a10] backdrop-blur-md">
+          <div className="flex items-center">
+            <h1 className="text-sm md:text-base font-bold font-display text-slate-850 dark:text-white tracking-wide">
+              {pathname === '/dashboard' ? (
+                <>
+                  <span className="text-slate-400 dark:text-slate-400 font-medium">Dashboard</span>
+                  <span className="mx-2 text-slate-450 dark:text-slate-500 font-normal">&gt;</span>
+                  <span>Overview</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-slate-400 dark:text-slate-400 font-medium">Dashboard</span>
+                  <span className="mx-2 text-slate-450 dark:text-slate-500 font-normal">&gt;</span>
+                  <span>{getActiveItemName()}</span>
+                </>
+              )}
+            </h1>
+          </div>
+
           <div className="flex items-center space-x-4">
             {/* Theme Toggle */}
             <button
@@ -192,9 +243,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               )}
             </button>
 
-            <div className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none">
-              <span className="text-xs text-slate-500 dark:text-slate-400 block uppercase tracking-wider font-semibold">User Account</span>
-              <span className="text-sm font-semibold text-indigo-600 dark:text-indigo-300 block">{user.email}</span>
+            {/* Circular Avatar */}
+            <div 
+              className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-650 flex items-center justify-center text-white text-sm font-bold shadow-md cursor-pointer border border-indigo-200 dark:border-white/10 hover:scale-105 transition-transform" 
+              title={user.email}
+            >
+              {user.email ? user.email[0].toUpperCase() : 'U'}
             </div>
           </div>
         </header>

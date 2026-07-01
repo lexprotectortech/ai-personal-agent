@@ -12,6 +12,7 @@
     "@google/genai": "^2.10.0",
     "@insforge/mcp": "^1.2.11",
     "@insforge/sdk": "^1.4.3",
+    "@sentdm/sentdm": "^0.30.0",
     "@trigger.dev/sdk": "4.4.6",
     "@whiskeysockets/baileys": "^7.0.0-rc13",
     "jimp": "^1.6.1",

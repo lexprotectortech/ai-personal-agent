@@ -8,7 +8,7 @@ interface AuthContextType {
   loading: boolean;
   signOut: () => Promise<void>;
   setUser: React.Dispatch<React.SetStateAction<any | null>>;
-  syncUser: (user: any) => Promise<void>;
+  syncUser: (user: any, phoneDetails?: { phone: string; method: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -17,13 +17,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Sync user information to database if it's their first time signing in
-  const syncUser = async (currentUser: any) => {
+  // Sync user information to database and update login timestamps/metadata
+  const syncUser = async (currentUser: any, phoneDetails?: { phone: string; method: string }) => {
     if (!currentUser) return;
     try {
       const { data, error } = await insforge.database
         .from('users')
-        .select('id')
+        .select('*')
         .eq('id', currentUser.id)
         .maybeSingle();
 
@@ -32,6 +32,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      const now = new Date().toISOString();
+      const isPhoneUser = currentUser.email?.startsWith('phone_') && currentUser.email?.endsWith('@phone.local');
+      
+      // Extract phone number from email if not explicitly provided
+      let phoneNum = phoneDetails?.phone || null;
+      if (!phoneNum && isPhoneUser) {
+        phoneNum = currentUser.email.split('@')[0].replace('phone_', '');
+      }
+
+      // Determine login provider
+      let providerName = 'email';
+      if (isPhoneUser) {
+        providerName = 'phone';
+      } else if (currentUser.providers?.includes('google') || currentUser.email?.endsWith('@gmail.com')) {
+        providerName = 'google';
+      }
+
+      const verificationMethod = phoneDetails?.method || (isPhoneUser ? 'unknown' : null);
+
       if (!data) {
         // User does not exist, insert their profile data
         const { error: insertError } = await insforge.database
@@ -39,14 +58,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .insert({
             id: currentUser.id,
             email: currentUser.email,
-            name: currentUser.profile?.name || currentUser.email.split('@')[0],
-            avatar_url: currentUser.profile?.avatar_url || ''
+            name: currentUser.profile?.name || (isPhoneUser ? `User ${phoneNum?.slice(-4) || ''}` : currentUser.email.split('@')[0]),
+            avatar_url: currentUser.profile?.avatar_url || '',
+            phone: phoneNum,
+            provider: providerName,
+            verification_method: verificationMethod,
+            last_login_at: now
           });
 
         if (insertError) {
           console.error('Error inserting user to DB:', insertError);
         } else {
           console.log('User profile synchronized to DB.');
+        }
+      } else {
+        // User exists, update last login and other metadata
+        const updateData: any = {
+          last_login_at: now,
+          updated_at: now
+        };
+
+        if (phoneNum) updateData.phone = phoneNum;
+        if (providerName) updateData.provider = providerName;
+        if (verificationMethod && verificationMethod !== 'unknown') {
+          updateData.verification_method = verificationMethod;
+        }
+
+        const { error: updateError } = await insforge.database
+          .from('users')
+          .update(updateData)
+          .eq('id', currentUser.id);
+
+        if (updateError) {
+          console.error('Error updating user in DB:', updateError);
+        } else {
+          console.log('User session sync/last login updated in DB.');
         }
       }
     } catch (err) {
