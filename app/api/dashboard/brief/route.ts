@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { insforge } from '../../../lib/insforge';
+import { getInsForgeClient } from '../../../lib/insforge';
 import { 
   whatsappConnections, 
   getMessageSender, 
@@ -7,6 +7,7 @@ import {
 } from '../../../lib/whatsapp-manager';
 import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
+import { fetchRecentEmails } from '../../../lib/gmail-api';
 
 export async function POST(request: Request) {
   try {
@@ -30,9 +31,12 @@ export async function POST(request: Request) {
       // Body may be empty, ignore
     }
 
+    const userJwt = request.headers.get('Authorization')?.replace('Bearer ', '');
+    const client = getInsForgeClient(userJwt);
+
     // 0. Check database cache if not forcing a refresh
     if (!forceRefresh) {
-      const { data: cachedData, error: cacheError } = await insforge.database
+      const { data: cachedData, error: cacheError } = await client.database
         .from('dashboard_briefs')
         .select('brief_data, updated_at')
         .eq('user_id', userId)
@@ -53,7 +57,7 @@ export async function POST(request: Request) {
     }
 
     // 1. Fetch connected platforms for the user from InsForge database
-    const { data: integrations, error: dbError } = await insforge.database
+    const { data: integrations, error: dbError } = await client.database
       .from('user_integrations')
       .select('platform_id, is_connected')
       .eq('user_id', userId);
@@ -123,20 +127,23 @@ export async function POST(request: Request) {
       }
     }
 
-    // --- Gmail (Simulated data if connected) ---
+    // --- Gmail ---
     if (connectedMap['gmail']) {
-      notifications.push({
-        source: 'gmail',
-        sender: 'Sarah Jenkins (Product)',
-        text: 'Urgent: UI feedback on Personal AI Agent dashboard. We need to adjust card layouts to support HSL tailwind colors. Sync today at 4 PM.',
-        timestamp: Math.floor(Date.now() / 1000) - 3600
-      });
-      notifications.push({
-        source: 'gmail',
-        sender: 'Google Billing',
-        text: 'Your Google Cloud invoice is now available for review.',
-        timestamp: Math.floor(Date.now() / 1000) - 7200
-      });
+      try {
+        const realEmails = await fetchRecentEmails(userId, 5);
+        if (realEmails && realEmails.length > 0) {
+          realEmails.forEach(email => {
+            notifications.push({
+              source: 'gmail',
+              sender: email.from,
+              text: `${email.subject}: ${email.snippet}`,
+              timestamp: email.timestamp
+            });
+          });
+        }
+      } catch (err) {
+        console.error('[Dashboard Brief API] Error fetching real Gmail emails:', err);
+      }
     }
 
     // --- Telegram (Simulated data if connected) ---
@@ -292,7 +299,7 @@ export async function POST(request: Request) {
     }
 
     // Save generated brief to database cache
-    const { error: upsertError } = await insforge.database
+    const { error: upsertError } = await client.database
       .from('dashboard_briefs')
       .upsert([
         {

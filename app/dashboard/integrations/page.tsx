@@ -18,7 +18,9 @@ import {
   Check,
   Play,
   Info,
-  CheckCircle2
+  CheckCircle2,
+  Mail,
+  Terminal
 } from 'lucide-react';
 
 interface Platform {
@@ -226,6 +228,43 @@ function IntegrationsContent() {
   const [actionResult, setActionResult] = useState<any>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Gmail settings states
+  const [gmailEmails, setGmailEmails] = useState<any[]>([]);
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [gmailError, setGmailError] = useState<string | null>(null);
+  const [copiedMcpConfig, setCopiedMcpConfig] = useState(false);
+
+  useEffect(() => {
+    if (settingsPlatform?.id === 'gmail' && connectedPlatforms.gmail) {
+      const loadGmailEmails = async () => {
+        setGmailLoading(true);
+        setGmailError(null);
+        try {
+          const res = await fetch('/api/gmail/emails', {
+            headers: {
+              'x-user-id': user?.id || '',
+            },
+          });
+          if (!res.ok) throw new Error('Failed to fetch emails');
+          const data = await res.json();
+          if (data.success) {
+            setGmailEmails(data.emails || []);
+          } else {
+            throw new Error(data.error || 'Failed to load inbox');
+          }
+        } catch (err: any) {
+          console.error(err);
+          setGmailError(err.message || 'Failed to fetch unread emails.');
+        } finally {
+          setGmailLoading(false);
+        }
+      };
+      loadGmailEmails();
+    } else {
+      setGmailEmails([]);
+    }
+  }, [settingsPlatform, connectedPlatforms.gmail, user?.id]);
+
   // Fetch initial connection states from InsForge DB on mount
   useEffect(() => {
     const fetchConnectedStates = async () => {
@@ -310,7 +349,44 @@ function IntegrationsContent() {
     const checkRedirectCallback = async () => {
       if (!user || pageLoading) return;
       
+      const code = searchParams.get('code');
       const connectedParam = searchParams.get('connected');
+
+      if (code) {
+        // Clear query parameters from URL immediately to keep it clean
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+
+        setLoadingStates(prev => ({ ...prev, gmail: true }));
+        try {
+          const redirectUri = `${window.location.origin}/dashboard/integrations`;
+          const res = await fetch('/api/auth/google-callback', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': user.id,
+            },
+            body: JSON.stringify({ code, redirectUri }),
+          });
+
+          if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.error || 'Token exchange request failed');
+          }
+
+          setConnectedPlatforms(prev => ({
+            ...prev,
+            gmail: true
+          }));
+        } catch (err: any) {
+          console.error('Gmail OAuth callback sync failed:', err);
+          setError(err.message || 'Failed to synchronize Gmail connection state after authorization.');
+        } finally {
+          setLoadingStates(prev => ({ ...prev, gmail: false }));
+        }
+        return;
+      }
+      
       if (connectedParam) {
         // Clear query parameters from URL immediately to keep it clean
         const newUrl = window.location.pathname;
@@ -365,9 +441,11 @@ function IntegrationsContent() {
     if (platformId === 'gmail' && !isCurrentlyConnected) {
       setError(null);
       try {
-        await insforge.auth.signInWithOAuth('google', {
-          redirectTo: `${window.location.origin}/dashboard/integrations?connected=gmail`
-        });
+        const clientId = '341616289505-7th9ide0lfctrf9cd7okcrjm4gopkglc.apps.googleusercontent.com';
+        const redirectUri = `${window.location.origin}/dashboard/integrations`;
+        const scope = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose';
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+        window.location.href = authUrl;
       } catch (err) {
         console.error('OAuth redirect failed:', err);
         setError('Failed to trigger Google authentication redirect.');
@@ -1004,6 +1082,120 @@ function IntegrationsContent() {
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Gmail Action Playground / Inbox Console */}
+              {settingsPlatform.id === 'gmail' && (
+                <div className="mt-8 border-t border-slate-200 dark:border-white/5 pt-6 space-y-6">
+                  {/* Interactive Inbox Console */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center">
+                      <Mail className="w-3.5 h-3.5 mr-2 text-red-500" />
+                      Interactive Inbox Console
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Live interactive view of your Gmail inbox (pulls recent unread emails).
+                    </p>
+
+                    {!connectedPlatforms.gmail ? (
+                      <div className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900/40 text-center">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Please connect your Gmail account to enable this console.</span>
+                      </div>
+                    ) : gmailLoading ? (
+                      <div className="flex items-center justify-center p-8 space-x-2">
+                        <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                        <span className="text-xs text-slate-400">Fetching live inbox...</span>
+                      </div>
+                    ) : gmailError ? (
+                      <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center space-x-2">
+                        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                        <span>{gmailError}</span>
+                      </div>
+                    ) : gmailEmails.length === 0 ? (
+                      <div className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900/40 text-center">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Your inbox is clean! No unread emails found.</span>
+                      </div>
+                    ) : (
+                      <div className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden divide-y divide-slate-200 dark:divide-white/10 max-h-[250px] overflow-y-auto">
+                        {gmailEmails.map((email) => (
+                          <div key={email.id} className="p-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors space-y-1 bg-white dark:bg-slate-950/40 text-left">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-semibold text-slate-900 dark:text-white truncate max-w-[200px]">{email.from}</span>
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                                {new Date(email.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <div className="text-xs font-medium text-indigo-600 dark:text-indigo-400 truncate">{email.subject}</div>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">{email.snippet}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* MCP Connection Guide */}
+                  <div className="space-y-4 border-t border-slate-200 dark:border-white/5 pt-6">
+                    <h4 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center">
+                      <Terminal className="w-3.5 h-3.5 mr-2 text-indigo-500" />
+                      MCP Connection Guide
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Configure your local Model Context Protocol client (Cursor, Claude Desktop, etc.) to use your Gmail integration directly.
+                    </p>
+
+                    <div className="relative group">
+                      <pre className="p-4 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-950/40 text-[10px] font-mono text-slate-800 dark:text-slate-300 overflow-x-auto leading-relaxed">
+{`{
+  "mcpServers": {
+    "gmail": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "gmail-mcp"
+      ],
+      "env": {
+        "GOOGLE_CLIENT_ID": "341616289505-7th9ide0lfctrf9cd7okcrjm4gopkglc.apps.googleusercontent.com",
+        "GOOGLE_CLIENT_SECRET": "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"
+      }
+    }
+  }
+}`}
+                      </pre>
+                      <button
+                        onClick={() => {
+                          const configStr = JSON.stringify({
+                            mcpServers: {
+                              gmail: {
+                                command: "npx",
+                                args: ["-y", "gmail-mcp"],
+                                env: {
+                                  GOOGLE_CLIENT_ID: "341616289505-7th9ide0lfctrf9cd7okcrjm4gopkglc.apps.googleusercontent.com",
+                                  GOOGLE_CLIENT_SECRET: "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"
+                                }
+                              }
+                            }
+                          }, null, 2);
+                          navigator.clipboard.writeText(configStr);
+                          setCopiedMcpConfig(true);
+                          setTimeout(() => setCopiedMcpConfig(false), 2000);
+                        }}
+                        className="absolute top-3 right-3 px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-300 dark:border-white/10 text-[10px] text-slate-600 dark:text-slate-300 transition-all font-semibold flex items-center space-x-1 cursor-pointer"
+                      >
+                        {copiedMcpConfig ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-500" />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

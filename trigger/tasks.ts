@@ -5,6 +5,8 @@ import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
 import { evaluateAlertRules } from "../app/lib/alerts-engine";
+import { fetchRecentEmails } from "../app/lib/gmail-api";
+import { sendSentDmMessage } from "../app/lib/sentdm";
 
 // 1. Cron Job: check schedules every 15 minutes
 export const checkSchedulesCron = schedules.task({
@@ -55,7 +57,7 @@ export const checkSchedulesCron = schedules.task({
 });
 
 // Helper to gather notifications for selected platforms
-function gatherChannelNotifications(userId: string, selectedApps: string[]): any[] {
+async function gatherChannelNotifications(userId: string, selectedApps: string[]): Promise<any[]> {
   const notifications: any[] = [];
   const now = Math.floor(Date.now() / 1000);
 
@@ -123,32 +125,28 @@ function gatherChannelNotifications(userId: string, selectedApps: string[]): any
     }
   }
 
-  // --- Gmail (Simulated) ---
+  // --- Gmail ---
   if (selectedApps.includes("gmail")) {
-    notifications.push({
-      id: "gm-sim-1",
-      source: "gmail",
-      category: "email",
-      sender: "Sarah Jenkins (Product)",
-      text: "Urgent: UI feedback on Personal AI Agent dashboard. We need to adjust card layouts to support HSL tailwind colors. Sync today at 4 PM.",
-      timestamp: now - 3600
-    });
-    notifications.push({
-      id: "gm-sim-2",
-      source: "gmail",
-      category: "email",
-      sender: "Google Billing",
-      text: "Your Google Cloud invoice is now available for review.",
-      timestamp: now - 7200
-    });
-    notifications.push({
-      id: "gm-sim-3",
-      source: "gmail",
-      category: "mentions",
-      sender: "Github Notifications",
-      text: "[Mention] @developer-user tagged you on issue #249: 'Need approval on the Dockerfile updates for staging deployment.'",
-      timestamp: now - 10800
-    });
+    try {
+      const realEmails = await fetchRecentEmails(userId, 5);
+      if (realEmails && realEmails.length > 0) {
+        realEmails.forEach(email => {
+          notifications.push({
+            id: email.id,
+            threadId: email.threadId,
+            source: "gmail",
+            category: "email",
+            sender: email.from,
+            text: `${email.subject}: ${email.snippet}`,
+            timestamp: email.timestamp
+          });
+        });
+      } else {
+        console.log(`[Worker] No real unread Gmail emails found for user ${userId}.`);
+      }
+    } catch (err) {
+      console.error("[Worker] Error fetching real Gmail emails:", err);
+    }
   }
 
   // --- Telegram (Simulated) ---
@@ -202,7 +200,7 @@ export const generateBriefing = task({
     console.log(`[Worker] Starting briefing run for user: ${userId}, schedule: ${scheduleId || "Default"}`);
 
     // Gather logs/notifications
-    const notifications = gatherChannelNotifications(userId, selectedApps);
+    const notifications = await gatherChannelNotifications(userId, selectedApps);
 
     // Filter by selected categories if specified
     const filteredNotifications = notifications.filter(item => {
@@ -376,6 +374,41 @@ export const generateBriefing = task({
     }
 
     console.log(`[Worker] Successfully completed briefing run. Briefing ID: ${savedId}`);
+
+    // Dispatch Sent.dm notification if active
+    try {
+      const { data: integration } = await insforge.database
+        .from("user_integrations")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("platform_id", "sent_dm")
+        .maybeSingle();
+
+      if (integration && integration.is_connected && integration.settings) {
+        const { phone, channels } = integration.settings;
+        if (phone && channels && channels.length > 0) {
+          const templateId = process.env.SENT_DM_TEMPLATE_ID || "e9eae6e7-1ec8-46ba-80da-fceb00723c0a";
+          
+          const summaryText = briefData.topHighlightedBrief?.summary || "Your daily briefing has been compiled and is ready for review.";
+          const titleText = briefData.topHighlightedBrief?.title || "Daily Briefing";
+          const messageContent = `${titleText}: ${summaryText}`;
+
+          console.log(`[Worker] Dispatching Sent.dm notification to ${phone} via channels ${channels.join(', ')}`);
+          
+          await sendSentDmMessage({
+            to: phone,
+            channel: channels,
+            templateId,
+            parameters: {
+              var_1: messageContent.slice(0, 150)
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[Worker] Failed to dispatch Sent.dm briefing notification:", err);
+    }
+
     return { success: true, briefingId: savedId };
   },
 });

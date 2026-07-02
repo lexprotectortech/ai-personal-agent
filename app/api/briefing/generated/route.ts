@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { insforge } from '../../../lib/insforge';
+import { getInsForgeClient } from '../../../lib/insforge';
 
 export async function GET(request: Request) {
   try {
@@ -11,9 +11,12 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const briefingId = url.searchParams.get('id');
 
+    const userJwt = request.headers.get('Authorization')?.replace('Bearer ', '');
+    const client = getInsForgeClient(userJwt);
+
     if (briefingId) {
       // Fetch a specific generated briefing run
-      const { data, error } = await insforge.database
+      const { data, error } = await client.database
         .from('generated_briefings')
         .select('*')
         .eq('id', briefingId)
@@ -32,7 +35,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, briefing: data });
     } else {
       // Fetch all generated briefings for the user
-      const { data, error } = await insforge.database
+      const { data, error } = await client.database
         .from('generated_briefings')
         .select('id, name, created_at, briefing_content->topHighlightedBrief as topBrief, briefing_content->categorySummaries as categories')
         .eq('user_id', userId)

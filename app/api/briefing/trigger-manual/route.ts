@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { tasks } from '@trigger.dev/sdk';
-import { insforge } from '../../../lib/insforge';
+import { getInsForgeClient } from '../../../lib/insforge';
 import type { generateBriefing } from '../../../../trigger/tasks';
 
 export async function POST(request: Request) {
@@ -17,8 +17,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing schedule ID' }, { status: 400 });
     }
 
+    const userJwt = request.headers.get('Authorization')?.replace('Bearer ', '');
+    const client = getInsForgeClient(userJwt);
+
     // Retrieve schedule details from DB
-    const { data: schedule, error } = await insforge.database
+    const { data: schedule, error } = await client.database
       .from('briefing_schedules')
       .select('*')
       .eq('id', scheduleId)

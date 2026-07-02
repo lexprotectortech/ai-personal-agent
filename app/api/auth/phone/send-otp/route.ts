@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { insforge } from '../../../../lib/insforge';
-import SentDm from '@sentdm/sentdm';
+import { sendSentDmMessage } from '../../../../lib/sentdm';
 
 export async function POST(request: Request) {
   try {
@@ -50,31 +50,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Database error. Failed to store OTP.' }, { status: 500 });
     }
 
-    // Initialize Sent.dm client
-    const apiKey = process.env.SENT_DM_API_KEY;
     const templateId = process.env.SENT_DM_TEMPLATE_ID || 'e9eae6e7-1ec8-46ba-80da-fceb00723c0a';
-
-    if (!apiKey) {
-      console.error('[Send OTP] Missing SENT_DM_API_KEY env var.');
-      return NextResponse.json({ error: 'Sent.dm API Key is not configured.' }, { status: 500 });
-    }
-
-    const sentdm = new SentDm({ apiKey });
 
     console.log(`[Send OTP] Sending ${method} OTP to ${cleanPhone} using template ${templateId}`);
 
-    const response = await sentdm.messages.send({
-      to: [cleanPhone],
-      template: {
-        id: templateId,
-        parameters: {
-          var_1: otpCode
-        }
-      },
-      channel: [method]
+    // Call our unified helper
+    await sendSentDmMessage({
+      to: cleanPhone,
+      channel: [method],
+      templateId,
+      parameters: {
+        var_1: otpCode
+      }
     });
-
-    console.log('[Send OTP] Sent.dm response:', response);
 
     return NextResponse.json({ success: true, message: 'OTP sent successfully' });
 

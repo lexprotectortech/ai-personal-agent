@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { insforge } from '../../../lib/insforge';
+import { getInsForgeClient } from '../../../lib/insforge';
 import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
 
@@ -16,8 +16,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing alertId parameter' }, { status: 400 });
     }
 
+    const userJwt = request.headers.get('Authorization')?.replace('Bearer ', '');
+    const client = getInsForgeClient(userJwt);
+
     // 1. Fetch triggered alert details
-    const { data: alert, error: fetchError } = await insforge.database
+    const { data: alert, error: fetchError } = await client.database
       .from('triggered_alerts')
       .select('*')
       .eq('id', alertId)
@@ -122,7 +125,7 @@ export async function POST(request: Request) {
     }
 
     // 3. Cache generated values back in DB
-    const { error: updateError } = await insforge.database
+    const { error: updateError } = await client.database
       .from('triggered_alerts')
       .update({
         ai_summary: aiOutput.summary,

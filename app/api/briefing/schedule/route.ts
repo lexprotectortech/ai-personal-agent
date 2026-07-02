@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { insforge } from '../../../lib/insforge';
+import { getInsForgeClient } from '../../../lib/insforge';
 
 // Helper to compute next run time based on scheduled time (HH:MM) and timezone
 function calculateNextRun(scheduledTime: string, timeZone: string = 'UTC'): Date {
@@ -47,7 +47,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized: Missing User ID' }, { status: 401 });
     }
 
-    const { data, error } = await insforge.database
+    const userJwt = request.headers.get('Authorization')?.replace('Bearer ', '');
+    const client = getInsForgeClient(userJwt);
+    const { data, error } = await client.database
       .from('briefing_schedules')
       .select('*')
       .eq('user_id', userId)
@@ -95,7 +97,9 @@ export async function POST(request: Request) {
       next_run_at: nextRunAt.toISOString()
     };
 
-    const { data, error } = await insforge.database
+    const userJwt = request.headers.get('Authorization')?.replace('Bearer ', '');
+    const client = getInsForgeClient(userJwt);
+    const { data, error } = await client.database
       .from('briefing_schedules')
       .insert([newSchedule])
       .select();
@@ -126,7 +130,9 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Missing schedule ID parameter' }, { status: 400 });
     }
 
-    const { error } = await insforge.database
+    const userJwt = request.headers.get('Authorization')?.replace('Bearer ', '');
+    const client = getInsForgeClient(userJwt);
+    const { error } = await client.database
       .from('briefing_schedules')
       .delete()
       .eq('id', scheduleId)

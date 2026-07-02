@@ -1,0 +1,57 @@
+{
+  "configPath": "D:\\GitHub\\ai-personal-agent\\.trigger\\tmp\\build-3t7xQv\\trigger.config.mjs",
+  "customConditions": [
+  ],
+  "prompts": [
+  ],
+  "queues": [
+  ],
+  "runtime": "node",
+  "runtimeVersion": "24.13.0",
+  "tasks": [
+    {
+      "entryPoint": "D:\\GitHub\\ai-personal-agent\\.trigger\\tmp\\build-3t7xQv\\tasks.mjs",
+      "filePath": "trigger/tasks.ts",
+      "id": "check-schedules-cron",
+      "maxDuration": 3600,
+      "schedule": {
+        "cron": "*/15 * * * *",
+        "timezone": "UTC"
+      },
+      "triggerSource": "schedule"
+    },
+    {
+      "entryPoint": "D:\\GitHub\\ai-personal-agent\\.trigger\\tmp\\build-3t7xQv\\tasks.mjs",
+      "filePath": "trigger/tasks.ts",
+      "id": "generate-briefing",
+      "maxDuration": 3600
+    },
+    {
+      "entryPoint": "D:\\GitHub\\ai-personal-agent\\.trigger\\tmp\\build-3t7xQv\\tasks.mjs",
+      "filePath": "trigger/tasks.ts",
+      "id": "hello-world",
+      "maxDuration": 3600
+    },
+    {
+      "entryPoint": "D:\\GitHub\\ai-personal-agent\\.trigger\\tmp\\build-3t7xQv\\tasks.mjs",
+      "filePath": "trigger/tasks.ts",
+      "id": "check-alerts-cron",
+      "maxDuration": 3600,
+      "schedule": {
+        "cron": "*/15 * * * *",
+        "timezone": "UTC"
+      },
+      "triggerSource": "schedule"
+    },
+    {
+      "entryPoint": "D:\\GitHub\\ai-personal-agent\\.trigger\\tmp\\build-3t7xQv\\tasks.mjs",
+      "filePath": "trigger/tasks.ts",
+      "id": "check-user-alert-rules",
+      "maxDuration": 3600
+    }
+  ],
+  "timings": {
+    "trigger/tasks.ts": 137.5405
+  },
+  "workerEntryPoint": "D:\\GitHub\\ai-personal-agent\\.trigger\\tmp\\build-3t7xQv\\dev-run-worker.mjs"
+}

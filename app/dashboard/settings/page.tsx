@@ -23,6 +23,9 @@ import {
   Lock,
   Info,
   Sparkles,
+  Phone,
+  Loader2,
+  Check,
   Link as LinkIcon
 } from 'lucide-react';
 
@@ -280,6 +283,21 @@ export default function SettingsPage() {
     discord: false,
   });
 
+  // Sent.dm State
+  const [sentDmActive, setSentDmActive] = useState(false);
+  const [sentDmPhone, setSentDmPhone] = useState('');
+  const [sentDmChannels, setSentDmChannels] = useState<string[]>(['sms']);
+  const [sentDmTime, setSentDmTime] = useState('09:00');
+  const [sentDmVerified, setSentDmVerified] = useState(false);
+
+  // Verification Sub-state
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpSuccess, setOtpSuccess] = useState<boolean>(false);
+
   const SETTINGS_KEY = `omnisync_settings_${user?.id || 'anon'}`;
 
   // ─── Load settings from localStorage on mount ───
@@ -349,6 +367,35 @@ export default function SettingsPage() {
         }
 
         setConnectedPlatforms(statuses);
+
+        // Load Sent.dm integration
+        const { data: sentDmRow } = await insforge.database
+          .from('user_integrations')
+          .select('*')
+          .eq('platform_id', 'sent_dm')
+          .maybeSingle();
+
+        if (sentDmRow) {
+          setSentDmActive(!!sentDmRow.is_connected);
+          if (sentDmRow.settings) {
+            setSentDmPhone(sentDmRow.settings.phone || '');
+            setSentDmChannels(sentDmRow.settings.channels || ['sms']);
+            setSentDmTime(sentDmRow.settings.time || '09:00');
+            setSentDmVerified(true);
+          }
+        } else {
+          // Fallback: Check if user already has verified phone in users table
+          const { data: userProfile } = await insforge.database
+            .from('users')
+            .select('phone')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (userProfile?.phone) {
+            setSentDmPhone(userProfile.phone);
+            setSentDmVerified(true);
+          }
+        }
       } catch (err) {
         console.error('Failed to load platform statuses:', err);
       }
@@ -363,9 +410,217 @@ export default function SettingsPage() {
     setHasChanges(true);
   }, []);
 
+  // Helper to send Verification Code OTP
+  const sendVerificationCode = async (method: 'sms' | 'whatsapp') => {
+    if (!sentDmPhone) {
+      setOtpError('Please enter a phone number.');
+      return;
+    }
+    setSendingOtp(true);
+    setOtpError(null);
+    setOtpSuccess(false);
+
+    try {
+      const res = await fetch('/api/auth/phone/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: sentDmPhone, method }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to send OTP');
+      }
+
+      setOtpSent(true);
+      setOtpSuccess(true);
+      setTimeout(() => setOtpSuccess(false), 3000);
+    } catch (err: any) {
+      console.error('Error sending OTP:', err);
+      setOtpError(err.message || 'Failed to send code. Please try again.');
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  // Helper to verify OTP
+  const verifyCode = async () => {
+    if (!otpCode) {
+      setOtpError('Please enter the verification code.');
+      return;
+    }
+    setVerifyingOtp(true);
+    setOtpError(null);
+
+    try {
+      const res = await fetch('/api/auth/phone/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: sentDmPhone, code: otpCode }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Invalid verification code');
+      }
+
+      // Mark as verified and active
+      setSentDmVerified(true);
+      setOtpSent(false);
+      setOtpCode('');
+
+      // Save phone number directly to users table
+      await insforge.database
+        .from('users')
+        .update({ phone: sentDmPhone })
+        .eq('id', user?.id);
+
+      // Save integration directly
+      await insforge.database
+        .from('user_integrations')
+        .upsert({
+          user_id: user?.id,
+          platform_id: 'sent_dm',
+          is_connected: true,
+          settings: {
+            phone: sentDmPhone,
+            channels: sentDmChannels,
+            time: sentDmTime,
+          },
+        });
+
+      // Sync briefing schedule
+      await syncBriefingSchedule(true, sentDmTime);
+
+      setSaveFlash(true);
+      setTimeout(() => setSaveFlash(false), 2000);
+    } catch (err: any) {
+      console.error('Error verifying OTP:', err);
+      setOtpError(err.message || 'Verification failed.');
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
+  const calculateNextRunLocal = (scheduledTime: string, timeZone: string = 'UTC'): Date => {
+    const [hours, minutes] = scheduledTime.split(':').map(Number);
+    const now = new Date();
+
+    try {
+      const tzString = now.toLocaleString('en-US', { timeZone });
+      const localDateInTZ = new Date(tzString);
+      const tzOffset = now.getTime() - localDateInTZ.getTime();
+
+      const year = localDateInTZ.getFullYear();
+      const month = String(localDateInTZ.getMonth() + 1).padStart(2, '0');
+      const day = String(localDateInTZ.getDate()).padStart(2, '0');
+
+      const isoString = `${year}-${month}-${day}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+      const localScheduledDate = new Date(isoString);
+
+      let scheduledDate = new Date(localScheduledDate.getTime() + tzOffset);
+      if (scheduledDate.getTime() <= now.getTime()) {
+        scheduledDate = new Date(scheduledDate.getTime() + 24 * 60 * 60 * 1000);
+      }
+      return scheduledDate;
+    } catch (e) {
+      const scheduledDate = new Date();
+      scheduledDate.setUTCHours(hours, minutes, 0, 0);
+      if (scheduledDate.getTime() <= now.getTime()) {
+        scheduledDate.setUTCDate(scheduledDate.getUTCDate() + 1);
+      }
+      return scheduledDate;
+    }
+  };
+
+  const syncBriefingSchedule = async (active: boolean, time: string) => {
+    if (!user) return;
+
+    try {
+      const { data: existing } = await insforge.database
+        .from('briefing_schedules')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('name', 'Daily Brief')
+        .maybeSingle();
+
+      if (active) {
+        const nextRun = calculateNextRunLocal(time, settings.timezone || 'UTC');
+
+        const scheduleData = {
+          user_id: user.id,
+          name: 'Daily Brief',
+          description: 'Automated Daily Briefing sent via Sent.dm',
+          selected_apps: ['gmail', 'whatsapp', 'telegram'],
+          selected_categories: ['email', 'messages', 'tasks'],
+          scheduled_time: time,
+          frequency: 'daily',
+          priority_level: 'Medium',
+          timezone: settings.timezone || 'UTC',
+          next_run_at: nextRun.toISOString()
+        };
+
+        if (existing) {
+          await insforge.database
+            .from('briefing_schedules')
+            .update(scheduleData)
+            .eq('id', existing.id);
+        } else {
+          await insforge.database
+            .from('briefing_schedules')
+            .insert(scheduleData);
+        }
+      } else {
+        if (existing) {
+          await insforge.database
+            .from('briefing_schedules')
+            .delete()
+            .eq('id', existing.id);
+        }
+      }
+    } catch (err) {
+      console.error('Error syncing briefing schedule:', err);
+    }
+  };
+
   // ─── Save settings ───
-  const saveSettings = () => {
+  const saveSettings = async () => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+
+    if (user) {
+      try {
+        const { error: integrationError } = await insforge.database
+          .from('user_integrations')
+          .upsert({
+            user_id: user.id,
+            platform_id: 'sent_dm',
+            is_connected: sentDmActive,
+            settings: {
+              phone: sentDmPhone,
+              channels: sentDmChannels,
+              time: sentDmTime,
+            },
+          });
+
+        if (integrationError) {
+          console.error('Error saving sent_dm integration:', integrationError);
+        }
+
+        // Update phone in users table if verified
+        if (sentDmVerified && sentDmPhone) {
+          await insforge.database
+            .from('users')
+            .update({ phone: sentDmPhone })
+            .eq('id', user.id);
+        }
+
+        // Sync schedule
+        await syncBriefingSchedule(sentDmActive, sentDmTime);
+      } catch (err) {
+        console.error('Error saving sent_dm configuration:', err);
+      }
+    }
+
     setHasChanges(false);
     setSaveFlash(true);
     setTimeout(() => setSaveFlash(false), 2000);
@@ -624,7 +879,135 @@ export default function SettingsPage() {
             />
           </SectionCard>
 
-          {/* ⑤ Privacy & Data */}
+          {/* ⑤ Sent.dm Notifications */}
+          <SectionCard
+            icon={<Phone className="w-5 h-5" />}
+            iconBg="bg-teal-500/10 border-teal-500/20"
+            iconColor="text-teal-600 dark:text-teal-400"
+            title="Sent.dm Mobile Notifications"
+            subtitle="Send daily briefing summaries or critical alerts directly to your mobile device via SMS or WhatsApp."
+          >
+            <ToggleSwitch
+              label="Enable Sent.dm Notifications"
+              helper="Activate automated text message alerts."
+              checked={sentDmActive}
+              onChange={(v) => {
+                setSentDmActive(v);
+                setHasChanges(true);
+              }}
+            />
+
+            {sentDmActive && (
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/5 space-y-4">
+                <div>
+                  <FieldLabel label="Phone Number" helper="International format starting with + (e.g. +14155552671)." />
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      value={sentDmPhone}
+                      onChange={(e) => {
+                        setSentDmPhone(e.target.value);
+                        setSentDmVerified(false); // Unverify if changed
+                        setHasChanges(true);
+                      }}
+                      className="flex-1 h-11 px-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] text-sm font-medium text-slate-700 dark:text-slate-200 outline-none focus:border-indigo-400 dark:focus:border-indigo-500/40 focus:ring-2 focus:ring-indigo-500/10 transition-all placeholder:text-slate-400"
+                      placeholder="+14155552671"
+                      disabled={sentDmVerified && !otpSent}
+                    />
+                    {sentDmVerified && !otpSent ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSentDmVerified(false);
+                          setHasChanges(true);
+                        }}
+                        className="h-11 px-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/10 transition-all cursor-pointer"
+                      >
+                        Change
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={sendingOtp || !sentDmPhone}
+                          onClick={() => sendVerificationCode('sms')}
+                          className="h-11 px-3 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-semibold disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center min-w-[70px]"
+                        >
+                          {sendingOtp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'SMS Code'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={sendingOtp || !sentDmPhone}
+                          onClick={() => sendVerificationCode('whatsapp')}
+                          className="h-11 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center min-w-[70px]"
+                        >
+                          {sendingOtp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'WA Code'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {sentDmVerified && (
+                    <p className="text-[11px] text-emerald-500 font-semibold mt-1.5 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Phone number verified and active.
+                    </p>
+                  )}
+                </div>
+
+                {otpSent && (
+                  <div className="bg-slate-50 dark:bg-white/[0.02] p-4 rounded-xl border border-slate-200/60 dark:border-white/5 space-y-3">
+                    <FieldLabel label="Enter Verification Code" helper="A 6-digit code has been sent to your device." />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                        className="flex-1 h-10 px-4 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-sm font-medium text-slate-700 dark:text-slate-200 outline-none focus:border-indigo-400 dark:focus:border-indigo-500/40 transition-all placeholder:text-slate-400"
+                        placeholder="123456"
+                      />
+                      <button
+                        type="button"
+                        disabled={verifyingOtp || otpCode.length !== 6}
+                        onClick={verifyCode}
+                        className="h-10 px-4 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-semibold disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center min-w-[80px]"
+                      >
+                        {verifyingOtp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Verify'}
+                      </button>
+                    </div>
+                    {otpError && <p className="text-[11px] text-rose-500 font-semibold">{otpError}</p>}
+                    {otpSuccess && <p className="text-[11px] text-emerald-500 font-semibold">Verification code sent successfully.</p>}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <PillToggleGroup
+                    label="Active Channels"
+                    helper="Channels to deliver notifications."
+                    options={['sms', 'whatsapp']}
+                    selected={sentDmChannels}
+                    onChange={(v) => {
+                      setSentDmChannels(v);
+                      setHasChanges(true);
+                    }}
+                  />
+                  <div>
+                    <FieldLabel label="Daily Briefing Time" helper="Scheduled time to receive your summary." />
+                    <input
+                      type="time"
+                      value={sentDmTime}
+                      onChange={(e) => {
+                        setSentDmTime(e.target.value);
+                        setHasChanges(true);
+                      }}
+                      className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] text-sm font-medium text-slate-700 dark:text-slate-200 outline-none focus:border-indigo-400 dark:focus:border-indigo-500/40 focus:ring-2 focus:ring-indigo-500/10 transition-all cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </SectionCard>
+
+          {/* ⑥ Privacy & Data */}
           <SectionCard
             icon={<Shield className="w-5 h-5" />}
             iconBg="bg-slate-500/10 border-slate-500/20"

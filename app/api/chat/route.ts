@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { insforge } from '../../lib/insforge';
+import { getInsForgeClient } from '../../lib/insforge';
 import { 
   whatsappConnections, 
   getMessageSender, 
   getMessageText 
 } from '../../lib/whatsapp-manager';
+import { fetchRecentEmails, createGmailDraft } from '../../lib/gmail-api';
 
 // System prompt to instruct the AI agent on behavior, context-gathering, and suggestion tags.
 const SYSTEM_PROMPT = `
@@ -190,11 +191,12 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
       parameters: {
         type: 'object',
         properties: {
-          recipient: { type: 'string', description: 'Email address of the recipient' },
-          subject: { type: 'string', description: 'Subject of the email' },
-          body: { type: 'string', description: 'Body text content of the email draft' }
+          recipient: { type: 'string', description: 'Email address of the recipient (optional if replying to a thread)' },
+          subject: { type: 'string', description: 'Subject of the email (optional if replying to a thread)' },
+          body: { type: 'string', description: 'Body text content of the email draft' },
+          threadId: { type: 'string', description: 'Gmail thread ID to reply to (optional)' }
         },
-        required: ['recipient', 'subject', 'body']
+        required: ['body']
       }
     }
   },
@@ -309,7 +311,9 @@ export async function POST(request: Request) {
           try {
             switch (toolName) {
               case 'fetch_connected_apps': {
-                const { data } = await insforge.database
+                const userJwt = request.headers.get('Authorization')?.replace('Bearer ', '');
+                const client = getInsForgeClient(userJwt);
+                const { data } = await client.database
                   .from('user_integrations')
                   .select('platform_id, is_connected')
                   .eq('user_id', userId);
@@ -386,11 +390,44 @@ export async function POST(request: Request) {
                 break;
               }
               case 'fetch_gmail_notifications': {
-                toolResult = getMockGmailNotifications();
+                try {
+                  const emails = await fetchRecentEmails(userId, 5);
+                  toolResult = {
+                    success: true,
+                    emails: emails.map(email => ({
+                      id: email.id,
+                      threadId: email.threadId,
+                      sender: email.from,
+                      subject: email.subject,
+                      text: email.snippet,
+                      timestamp: email.timestamp
+                    }))
+                  };
+                } catch (err: any) {
+                  console.error('Error fetching Gmail emails in chat route:', err);
+                  toolResult = { success: false, error: err.message };
+                }
                 break;
               }
               case 'create_gmail_draft': {
-                toolResult = { success: true, draftCreated: true, recipient: toolArgs.recipient, subject: toolArgs.subject };
+                try {
+                  const success = await createGmailDraft(
+                    userId,
+                    toolArgs.threadId || null,
+                    toolArgs.body,
+                    toolArgs.recipient,
+                    toolArgs.subject
+                  );
+                  toolResult = { 
+                    success: success, 
+                    draftCreated: success, 
+                    recipient: toolArgs.recipient, 
+                    subject: toolArgs.subject 
+                  };
+                } catch (err: any) {
+                  console.error('Error creating Gmail draft in chat route:', err);
+                  toolResult = { success: false, error: err.message };
+                }
                 break;
               }
               case 'fetch_outlook_calendar_events': {
@@ -398,7 +435,9 @@ export async function POST(request: Request) {
                 break;
               }
               case 'fetch_today_brief': {
-                const { data } = await insforge.database
+                const userJwt = request.headers.get('Authorization')?.replace('Bearer ', '');
+                const client = getInsForgeClient(userJwt);
+                const { data } = await client.database
                   .from('dashboard_briefs')
                   .select('brief_data')
                   .eq('user_id', userId)
