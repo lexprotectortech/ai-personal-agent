@@ -31,10 +31,10 @@ export default function SignInPage() {
 	const [googleLoading, setGoogleLoading] = useState(false);
 	const [showResetModal, setShowResetModal] = useState(false);
 
-	// If user is already signed in, redirect them to home/dashboard
+	// If user is already signed in, redirect them to dashboard
 	useEffect(() => {
 		if (user) {
-			router.push("/");
+			router.push("/dashboard");
 		}
 	}, [user, router]);
 
@@ -61,7 +61,7 @@ export default function SignInPage() {
 			} else if (data?.user) {
 				setUser(data.user);
 				await syncUser(data.user);
-				router.push("/");
+				router.push("/dashboard");
 			}
 		} catch {
 			setError("An unexpected error occurred. Please try again.");
@@ -78,7 +78,7 @@ export default function SignInPage() {
 			const { error: authError } = await insforge.auth.signInWithOAuth(
 				"google",
 				{
-					redirectTo: `${window.location.origin}/`,
+					redirectTo: `${window.location.origin}/dashboard`,
 					skipBrowserRedirect: false,
 				},
 			);
