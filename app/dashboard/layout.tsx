@@ -186,7 +186,7 @@ export default function DashboardLayout({
 				</div>
 
 				{/* Navigation Options */}
-				<nav className="flex-1 overflow-y-auto px-3 py-6 space-y-6">
+				<nav className="flex-1 overflow-y-auto px-3 py-2 space-y-6">
 					{navigationCategories.map((category, catIdx) => (
 						<div key={category.title} className="space-y-1.5">
 							{!isCollapsed && (
@@ -205,29 +205,17 @@ export default function DashboardLayout({
 				</nav>
 
 				{/* Sidebar Footer */}
-				<div className="p-3 border-t border-slate-200 dark:border-white/5 space-y-2">
-					{/* Sign Out & Collapse Controls */}
-					<div className="flex flex-col space-y-1">
-						<button
-							onClick={() => signOut()}
-							className="flex items-center space-x-3.5 w-full px-3 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-500/5 transition-all duration-200 cursor-pointer">
-							<LogOut className="w-5 h-5 flex-shrink-0" />
-							{!isCollapsed && (
-								<span className="text-sm font-semibold tracking-wide">
-									Sign Out
-								</span>
-							)}
-						</button>
-
-						<button
-							onClick={() => setIsCollapsed(!isCollapsed)}
-							className="flex items-center justify-center w-full py-2.5 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 transition-colors duration-200 mt-2 cursor-pointer"
-							aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
-							{isCollapsed ?
-								<ChevronRight className="w-5 h-5" />
-							:	<ChevronLeft className="w-5 h-5" />}
-						</button>
-					</div>
+				<div className="p-3 border-t border-slate-200 dark:border-white/5">
+					<button
+						onClick={() => signOut()}
+						className="flex items-center space-x-3.5 w-full px-3 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-500/5 transition-all duration-200 cursor-pointer">
+						<LogOut className="w-5 h-5 flex-shrink-0" />
+						{!isCollapsed && (
+							<span className="text-sm font-semibold tracking-wide">
+								Sign Out
+							</span>
+						)}
+					</button>
 				</div>
 			</aside>
 
@@ -235,7 +223,17 @@ export default function DashboardLayout({
 			<div className="flex-1 flex flex-col h-full overflow-hidden">
 				{/* Top Header bar */}
 				<header className="h-20 border-b border-slate-200 dark:border-white/5 flex items-center justify-between px-8 bg-white/40 dark:bg-[#0b0a10] backdrop-blur-md z-10">
-					<div className="flex items-center">
+					<div className="flex items-center gap-3">
+						{/* Collapse Toggle - Connector between sidebar and header */}
+						<button
+							onClick={() => setIsCollapsed(!isCollapsed)}
+							className="flex items-center justify-center p-2.5 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 transition-colors duration-200 cursor-pointer border border-slate-200 dark:border-white/10"
+							aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+							{isCollapsed ?
+								<ChevronRight className="w-5 h-5" />
+							:	<ChevronLeft className="w-5 h-5" />}
+						</button>
+
 						<h1 className="text-sm md:text-base font-bold font-display text-slate-850 dark:text-white tracking-wide">
 							{pathname === "/dashboard" ?
 								<>
