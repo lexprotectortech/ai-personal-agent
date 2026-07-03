@@ -22,8 +22,6 @@ import {
 	FileText,
 	Clock,
 	Star,
-	Search,
-	Command,
 } from "lucide-react";
 
 interface BriefItem {
@@ -72,9 +70,6 @@ export default function DashboardPage() {
 	const [followUpsCount, setFollowUpsCount] = useState(0);
 	const [briefItems, setBriefItems] = useState<BriefItem[]>([]);
 	const [priorityItems, setPriorityItems] = useState<PriorityItem[]>([]);
-
-	// Command bar
-	const [commandQuery, setCommandQuery] = useState("");
 
 	// Time-based greeting
 	const getGreeting = () => {
@@ -245,16 +240,6 @@ export default function DashboardPage() {
 		fetchPriorityCard(force);
 	};
 
-	// Command bar submit
-	const handleCommandSubmit = (e: React.FormEvent) => {
-		e.preventDefault();
-		if (commandQuery.trim()) {
-			router.push(
-				`/dashboard/ai-agent?q=${encodeURIComponent(commandQuery.trim())}`,
-			);
-		}
-	};
-
 	// Brief item icon helper
 	const getBriefIcon = (source: string) => {
 		switch (source) {
@@ -329,33 +314,6 @@ export default function DashboardPage() {
 					</span>
 				</button>
 			</div>
-
-			{/* ─── Row 1: Command Bar (Full-Width) ─── */}
-			<form onSubmit={handleCommandSubmit} className="relative">
-				<div className="flex items-center h-[52px] rounded-2xl bg-white dark:bg-[#121118] border border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none px-4 gap-3 transition-all focus-within:border-indigo-400 dark:focus-within:border-indigo-500/40 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.08)]">
-					<div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-						<Sparkles className="w-4 h-4 text-white" />
-					</div>
-					<input
-						type="text"
-						placeholder="Ask anything or type a command..."
-						value={commandQuery}
-						onChange={(e) => setCommandQuery(e.target.value)}
-						className="flex-1 h-full bg-transparent text-sm text-slate-700 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none font-medium"
-					/>
-					<div className="flex items-center space-x-2 flex-shrink-0">
-						<button
-							type="submit"
-							className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white hover:from-indigo-600 hover:to-purple-700 transition-all cursor-pointer shadow-sm">
-							<Sparkles className="w-3.5 h-3.5" />
-						</button>
-						<div className="hidden sm:flex items-center space-x-1 text-[11px] text-slate-400 dark:text-slate-200 font-mono bg-slate-100 dark:bg-white/5 px-2 py-1 rounded-lg border border-slate-200 dark:border-white/5">
-							<Command className="w-3 h-3" />
-							<span>K</span>
-						</div>
-					</div>
-				</div>
-			</form>
 
 			{/* ─── Row 2: Today's Brief + Stats Grid (5-Columns on Desktop) ─── */}
 			<div className="grid grid-cols-1 md:grid-cols-5 gap-4">
