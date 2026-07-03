@@ -32,14 +32,14 @@ export default function ResetPasswordModal({
 	// Step 1 fields
 	const [resetEmail, setResetEmail] = useState("");
 
-	// Step 2 fields
-	const [otp, setOtp] = useState("");
+	// Step 2 fields — email code is exchanged for a server token
+	const [emailCode, setEmailCode] = useState("");
 	const [newPassword, setNewPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [showNewPassword, setShowNewPassword] = useState(false);
 	const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-	const otpRef = useRef<HTMLInputElement>(null);
+	const codeInputRef = useRef<HTMLInputElement>(null);
 	const dialogRef = useRef<HTMLDivElement>(null);
 
 	// Reset state when modal opens/closes
@@ -51,7 +51,7 @@ export default function ResetPasswordModal({
 			setError(null);
 			setSuccess(false);
 			setResetEmail("");
-			setOtp("");
+			setEmailCode("");
 			setNewPassword("");
 			setConfirmPassword("");
 			setShowNewPassword(false);
@@ -59,10 +59,10 @@ export default function ResetPasswordModal({
 		});
 	}, [isOpen]);
 
-	// Focus OTP input when step 2 opens
+	// Focus code input when step 2 opens
 	useEffect(() => {
-		if (step === 2 && otpRef.current) {
-			otpRef.current.focus();
+		if (step === 2 && codeInputRef.current) {
+			codeInputRef.current.focus();
 		}
 	}, [step]);
 
@@ -147,13 +147,13 @@ export default function ResetPasswordModal({
 		}
 	};
 
-	// ─── Step 2: Verify OTP + Reset password ────────────────────────────────
+	// ─── Step 2: Exchange code for token → reset password ──────────────────
 	const handleResetPassword = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError(null);
 
-		if (otp.trim().length === 0) {
-			setError("Please enter the verification code.");
+		if (emailCode.trim().length === 0) {
+			setError("Please enter the verification code from your email.");
 			return;
 		}
 		if (newPassword.length < 6) {
@@ -168,15 +168,33 @@ export default function ResetPasswordModal({
 		setLoading(true);
 
 		try {
+			// Step 2a: Exchange email + code for a server-side token
+			const exchangeRes = await fetch("/api/auth/reset-password-verify", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email: resetEmail.trim(), code: emailCode.trim() }),
+			});
+
+			const exchangeData = await exchangeRes.json();
+
+			if (!exchangeRes.ok || !exchangeData.token) {
+				setError(
+					exchangeData.error || "Invalid or expired verification code.",
+				);
+				setLoading(false);
+				return;
+			}
+
+			// Step 2b: Use the exchanged token as the otp parameter
 			const { error: resetError } = await insforge.auth.resetPassword({
 				newPassword,
-				otp: otp.trim(),
+				otp: exchangeData.token,
 			});
 
 			if (resetError) {
 				setError(
 					resetError.message ||
-						"Failed to reset password. Please check your code and try again.",
+						"Failed to reset password. Please request a new code.",
 				);
 			} else {
 				setSuccess(true);
@@ -239,32 +257,31 @@ export default function ResetPasswordModal({
 
 				{/* Step progress bar */}
 				<div className="flex gap-2 mb-6">
+					<div className="h-1 flex-1 rounded-full bg-indigo-500" />
 					<div
 						className={`h-1 flex-1 rounded-full transition-colors ${
-							step === 1 ? "bg-indigo-500" : "bg-indigo-500"
-						}`}
-					/>
-					<div
-						className={`h-1 flex-1 rounded-full transition-colors ${
-							step === 2 ? "bg-indigo-500" : "bg-slate-200 dark:bg-white/10"
+							step === 2
+								? "bg-indigo-500"
+								: "bg-slate-200 dark:bg-white/10"
 						}`}
 					/>
 				</div>
 
 				{/* Success state */}
-				{success ?
+				{success ? (
 					<div className="flex flex-col items-center py-4 text-center">
 						<CheckCircle2 className="w-14 h-14 text-emerald-500 mb-4" />
 						<h3 className="text-base font-semibold text-slate-800 dark:text-white mb-2">
 							Password Updated!
 						</h3>
 						<p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-							Your password has been changed successfully. Redirecting you to
-							sign in&hellip;
+							Your password has been changed successfully. Redirecting you
+							to sign in&hellip;
 						</p>
 						<div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
 					</div>
-				:	<>
+				) : (
+					<>
 						{error && (
 							<div className="mb-5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-300 text-sm">
 								{error}
@@ -275,8 +292,8 @@ export default function ResetPasswordModal({
 						{step === 1 && (
 							<form onSubmit={handleSendReset} className="space-y-5">
 								<p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-									Enter the email address associated with your account and
-									we&apos;ll send you a verification code.
+									Enter the email address associated with your account
+									and we&apos;ll send you a verification code.
 								</p>
 
 								<div>
@@ -304,16 +321,17 @@ export default function ResetPasswordModal({
 									type="submit"
 									disabled={loading}
 									className="w-full inline-flex items-center justify-center h-11 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 transition-all disabled:opacity-50 cursor-pointer">
-									{loading ?
+									{loading ? (
 										<>
 											<Loader2 className="w-4 h-4 mr-2 animate-spin" />
 											Sending Code&hellip;
 										</>
-									:	<>
+									) : (
+										<>
 											Send Verification Code
 											<ArrowRight className="w-4 h-4 ml-2" />
 										</>
-									}
+									)}
 								</button>
 
 								<p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
@@ -328,34 +346,36 @@ export default function ResetPasswordModal({
 							</form>
 						)}
 
-						{/* ── Step 2: OTP + New Password ───────────────────────────── */}
+						{/* ── Step 2: Code + New Password ──────────────────────────── */}
 						{step === 2 && (
 							<form onSubmit={handleResetPassword} className="space-y-5">
 								<p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-									A 6-digit verification code was sent to{" "}
+									A verification code was sent to{" "}
 									<span className="font-semibold text-slate-700 dark:text-slate-300">
 										{resetEmail}
 									</span>
 									. Enter it below along with your new password.
 								</p>
 
-								{/* OTP */}
+								{/* Email code from inbox */}
 								<div>
 									<label
-										htmlFor="reset-otp"
+										htmlFor="reset-code"
 										className="block text-xs font-semibold text-slate-650 dark:text-slate-300 uppercase tracking-wider mb-2">
 										Verification Code
 									</label>
 									<input
-										ref={otpRef}
-										id="reset-otp"
+										ref={codeInputRef}
+										id="reset-code"
 										type="text"
 										inputMode="numeric"
 										pattern="[0-9]*"
 										required
-										value={otp}
+										value={emailCode}
 										onChange={(e) =>
-											setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+											setEmailCode(
+												e.target.value.replace(/\D/g, "").slice(0, 20),
+											)
 										}
 										placeholder="123456"
 										autoComplete="one-time-code"
@@ -389,9 +409,11 @@ export default function ResetPasswordModal({
 											aria-label={
 												showNewPassword ? "Hide password" : "Show password"
 											}>
-											{showNewPassword ?
+											{showNewPassword ? (
 												<EyeOff className="w-4 h-4" />
-											:	<Eye className="w-4 h-4" />}
+											) : (
+												<Eye className="w-4 h-4" />
+											)}
 										</button>
 									</div>
 								</div>
@@ -409,7 +431,9 @@ export default function ResetPasswordModal({
 											type={showConfirmPassword ? "text" : "password"}
 											required
 											value={confirmPassword}
-											onChange={(e) => setConfirmPassword(e.target.value)}
+											onChange={(e) =>
+												setConfirmPassword(e.target.value)
+											}
 											placeholder="Repeat new password"
 											autoComplete="new-password"
 											className="w-full bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-white/10 rounded-xl py-3 pl-11 pr-11 text-sm text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
@@ -420,11 +444,15 @@ export default function ResetPasswordModal({
 											onClick={() => setShowConfirmPassword((p) => !p)}
 											className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
 											aria-label={
-												showConfirmPassword ? "Hide password" : "Show password"
+												showConfirmPassword
+													? "Hide password"
+													: "Show password"
 											}>
-											{showConfirmPassword ?
+											{showConfirmPassword ? (
 												<EyeOff className="w-4 h-4" />
-											:	<Eye className="w-4 h-4" />}
+											) : (
+												<Eye className="w-4 h-4" />
+											)}
 										</button>
 									</div>
 								</div>
@@ -433,16 +461,17 @@ export default function ResetPasswordModal({
 									type="submit"
 									disabled={loading}
 									className="w-full inline-flex items-center justify-center h-11 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 transition-all disabled:opacity-50 cursor-pointer">
-									{loading ?
+									{loading ? (
 										<>
 											<Loader2 className="w-4 h-4 mr-2 animate-spin" />
 											Resetting Password&hellip;
 										</>
-									:	<>
+									) : (
+										<>
 											Reset Password
 											<ArrowRight className="w-4 h-4 ml-2" />
 										</>
-									}
+									)}
 								</button>
 
 								<p className="text-xs text-slate-500 dark:text-slate-400 text-center">
@@ -456,7 +485,7 @@ export default function ResetPasswordModal({
 							</form>
 						)}
 					</>
-				}
+				)}
 			</div>
 		</div>
 	);
