@@ -20,6 +20,8 @@ import {
 	Sun,
 	Moon,
 	ArrowLeft,
+	Mic,
+	ArrowUp,
 } from "lucide-react";
 
 interface SidebarItem {
@@ -232,7 +234,7 @@ export default function DashboardLayout({
 			{/* Main Content Area */}
 			<div className="flex-1 flex flex-col h-full overflow-hidden">
 				{/* Top Header bar */}
-				<header className="h-20 border-b border-slate-200 dark:border-white/5 flex items-center justify-between px-8 bg-white/40 dark:bg-[#0b0a10] backdrop-blur-md">
+				<header className="h-20 border-b border-slate-200 dark:border-white/5 flex items-center justify-between px-8 bg-white/40 dark:bg-[#0b0a10] backdrop-blur-md z-10">
 					<div className="flex items-center">
 						<h1 className="text-sm md:text-base font-bold font-display text-slate-850 dark:text-white tracking-wide">
 							{pathname === "/dashboard" ?
@@ -284,6 +286,52 @@ export default function DashboardLayout({
 					<div className="absolute top-10 right-10 w-[400px] h-[400px] rounded-full bg-purple-500/5 filter blur-[100px] pointer-events-none -z-10" />
 					{children}
 				</main>
+
+				{/* ─── Bottom AI Chat Bar (sticky) ─── */}
+				<div
+					className={`fixed bottom-0 transition-all duration-300 z-30 pointer-events-none`}
+					style={{
+						left: isCollapsed ? "80px" : "256px",
+						right: "0",
+					}}>
+					<div className="max-w-6xl mx-auto px-8 pb-5 pointer-events-auto">
+						<form
+							onSubmit={(e) => {
+								e.preventDefault();
+								const input = (e.target as HTMLFormElement).elements.namedItem(
+									"bottomChat",
+								) as HTMLInputElement;
+								if (input?.value.trim()) {
+									router.push(
+										`/dashboard/ai-agent?q=${encodeURIComponent(input.value.trim())}`,
+									);
+								}
+							}}
+							className="flex items-center h-[52px] rounded-2xl bg-white/90 dark:bg-slate-900/80 border border-slate-200 dark:border-white/5 shadow-xl dark:shadow-2xl backdrop-blur-xl px-4 gap-3">
+							<div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+								<Sparkles className="w-4 h-4 text-white" />
+							</div>
+							<input
+								name="bottomChat"
+								type="text"
+								placeholder="How can I help you today?"
+								className="flex-1 h-full bg-transparent text-sm text-slate-700 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none font-medium"
+							/>
+							<div className="flex items-center space-x-2 flex-shrink-0">
+								<button
+									type="button"
+									className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-350 transition-colors cursor-pointer">
+									<Mic className="w-4 h-4" />
+								</button>
+								<button
+									type="submit"
+									className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white hover:from-indigo-600 hover:to-purple-700 transition-all cursor-pointer shadow-sm">
+									<ArrowUp className="w-4 h-4" />
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
 			</div>
 		</div>
 	);
