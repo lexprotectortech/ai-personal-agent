@@ -327,6 +327,100 @@ const ACTION_PARAMS_CONFIG: Record<
 			type: "textarea",
 		},
 	],
+	// Gmail tools
+	gmail_list_threads: [
+		{
+			label: "Search Query (optional)",
+			key: "query",
+			placeholder: "e.g. from:john or subject:meeting",
+			type: "text",
+		},
+		{ label: "Limit", key: "limit", placeholder: "e.g. 10", type: "number" },
+	],
+	gmail_get_thread: [
+		{
+			label: "Thread ID",
+			key: "threadId",
+			placeholder: "e.g. 18f3a2b...",
+			type: "text",
+		},
+	],
+	gmail_search_emails: [
+		{
+			label: "Search Query",
+			key: "query",
+			placeholder: "e.g. from:boss subject:urgent is:unread",
+			type: "text",
+		},
+		{ label: "Limit", key: "limit", placeholder: "e.g. 10", type: "number" },
+	],
+	gmail_create_draft: [
+		{
+			label: "Recipient Email",
+			key: "recipient",
+			placeholder: "e.g. john@example.com",
+			type: "text",
+		},
+		{
+			label: "Subject",
+			key: "subject",
+			placeholder: "e.g. Meeting Follow-up",
+			type: "text",
+		},
+		{
+			label: "Draft Body",
+			key: "body",
+			placeholder: "Type your draft email body...",
+			type: "textarea",
+		},
+		{
+			label: "Reply to Thread ID (optional)",
+			key: "threadId",
+			placeholder: "Leave blank for new draft",
+			type: "text",
+		},
+	],
+	gmail_send_email: [
+		{
+			label: "To (Recipient Email)",
+			key: "to",
+			placeholder: "e.g. john@example.com",
+			type: "text",
+		},
+		{
+			label: "Subject",
+			key: "subject",
+			placeholder: "e.g. Quick Update",
+			type: "text",
+		},
+		{
+			label: "Message Body",
+			key: "body",
+			placeholder: "Type your email message...",
+			type: "textarea",
+		},
+	],
+	gmail_apply_label: [
+		{
+			label: "Thread ID",
+			key: "threadId",
+			placeholder: "e.g. 18f3a2b...",
+			type: "text",
+		},
+		{
+			label: "Label ID",
+			key: "labelId",
+			placeholder: "e.g. Label_1 or INBOX",
+			type: "text",
+		},
+		{
+			label: "Action (add / remove)",
+			key: "labelAction",
+			placeholder: "add",
+			type: "text",
+		},
+	],
+	gmail_list_labels: [],
 };
 
 function IntegrationsContent() {
@@ -371,6 +465,20 @@ function IntegrationsContent() {
 	const [gmailLoading, setGmailLoading] = useState(false);
 	const [gmailError, setGmailError] = useState<string | null>(null);
 	const [copiedMcpConfig, setCopiedMcpConfig] = useState(false);
+	const [gmailFilter, setGmailFilter] = useState<"all" | "unread">("all");
+
+	// Gmail action playground states
+	const [gmailSelectedAction, setGmailSelectedAction] = useState(
+		"gmail_list_threads",
+	);
+	const [gmailActionParams, setGmailActionParams] = useState<
+		Record<string, string>
+	>({});
+	const [gmailActionExecuting, setGmailActionExecuting] = useState(false);
+	const [gmailActionResult, setGmailActionResult] = useState<any>(null);
+	const [gmailActionError, setGmailActionError] = useState<string | null>(
+		null,
+	);
 
 	useEffect(() => {
 		if (settingsPlatform?.id === "gmail" && connectedPlatforms.gmail) {
@@ -378,21 +486,27 @@ function IntegrationsContent() {
 				setGmailLoading(true);
 				setGmailError(null);
 				try {
-					const res = await fetch("/api/gmail/emails", {
-						headers: {
-							"x-user-id": user?.id || "",
+					const res = await fetch(
+						`/api/gmail/emails?filter=${gmailFilter}&limit=15`,
+						{
+							headers: {
+								"x-user-id": user?.id || "",
+							},
 						},
-					});
-					if (!res.ok) throw new Error("Failed to fetch emails");
+					);
 					const data = await res.json();
 					if (data.success) {
 						setGmailEmails(data.emails || []);
 					} else {
-						throw new Error(data.error || "Failed to load inbox");
+						throw new Error(
+							data.error || "Failed to load inbox",
+						);
 					}
 				} catch (err: any) {
 					console.error(err);
-					setGmailError(err.message || "Failed to fetch unread emails.");
+					setGmailError(
+						err.message || "Failed to fetch emails.",
+					);
 				} finally {
 					setGmailLoading(false);
 				}
@@ -401,7 +515,7 @@ function IntegrationsContent() {
 		} else {
 			setGmailEmails([]);
 		}
-	}, [settingsPlatform, connectedPlatforms.gmail, user?.id]);
+	}, [settingsPlatform, connectedPlatforms.gmail, user?.id, gmailFilter]);
 
 	// Fetch initial connection states from InsForge DB on mount
 	useEffect(() => {
@@ -1331,90 +1445,287 @@ function IntegrationsContent() {
 								</div>
 							)}
 
-							{/* Gmail Action Playground / Inbox Console */}
-							{settingsPlatform.id === "gmail" && (
-								<div className="mt-8 border-t border-slate-200 dark:border-white/5 pt-6 space-y-6">
-									{/* Interactive Inbox Console */}
-									<div className="space-y-4">
-										<h4 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center">
-											<Mail className="w-3.5 h-3.5 mr-2 text-red-500" />
-											Interactive Inbox Console
-										</h4>
-										<p className="text-xs text-slate-500 dark:text-slate-400">
-											Live interactive view of your Gmail inbox (pulls recent
-											unread emails).
-										</p>
 
-										{!connectedPlatforms.gmail ?
-											<div className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900/40 text-center">
-												<span className="text-xs text-slate-500 dark:text-slate-400">
-													Please connect your Gmail account to enable this
-													console.
-												</span>
-											</div>
-										: gmailLoading ?
-											<div className="flex items-center justify-center p-8 space-x-2">
-												<Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
-												<span className="text-xs text-slate-400">
-													Fetching live inbox...
-												</span>
-											</div>
-										: gmailError ?
-											<div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center space-x-2">
-												<AlertTriangle className="w-4 h-4 flex-shrink-0" />
-												<span>{gmailError}</span>
-											</div>
-										: gmailEmails.length === 0 ?
-											<div className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900/40 text-center">
-												<span className="text-xs text-slate-500 dark:text-slate-400">
-													Your inbox is clean! No unread emails found.
-												</span>
-											</div>
-										:	<div className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden divide-y divide-slate-200 dark:divide-white/10 max-h-[250px] overflow-y-auto">
-												{gmailEmails.map((email) => (
-													<div
-														key={email.id}
-														className="p-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors space-y-1 bg-white dark:bg-slate-950/40 text-left">
-														<div className="flex items-center justify-between text-xs">
-															<span className="font-semibold text-slate-900 dark:text-white truncate max-w-[200px]">
-																{email.from}
-															</span>
-															<span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-																{new Date(
-																	email.timestamp * 1000,
-																).toLocaleTimeString([], {
-																	hour: "2-digit",
-																	minute: "2-digit",
-																})}
-															</span>
-														</div>
-														<div className="text-xs font-medium text-indigo-600 dark:text-indigo-400 truncate">
-															{email.subject}
-														</div>
-														<p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
-															{email.snippet}
-														</p>
-													</div>
-												))}
-											</div>
-										}
+						{/* Gmail Action Playground / Inbox Console */}
+						{settingsPlatform.id === "gmail" && (
+							<div className="mt-8 border-t border-slate-200 dark:border-white/5 pt-6 space-y-6">
+								{/* Gmail Interactive Action Playground */}
+								<div className="space-y-4">
+									<h4 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center">
+										<Play className="w-3.5 h-3.5 mr-2 text-red-500" />
+										Interactive Action Playground
+									</h4>
+									<p className="text-xs text-slate-500 dark:text-slate-400">
+										Test and execute Gmail MCP tools live against your
+										connected account.
+									</p>
+
+									{/* Select Gmail Tool */}
+									<div className="space-y-2">
+										<label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+											Select Gmail Action
+										</label>
+										<select
+											value={gmailSelectedAction}
+											onChange={(e) => {
+												setGmailSelectedAction(e.target.value);
+												setGmailActionParams({});
+												setGmailActionResult(null);
+												setGmailActionError(null);
+											}}
+											className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+											{settingsPlatform.tools.map((tool) => (
+												<option key={tool.name} value={tool.name}>
+													{tool.name} - {tool.desc.slice(0, 50)}...
+												</option>
+											))}
+										</select>
 									</div>
 
-									{/* MCP Connection Guide */}
-									<div className="space-y-4 border-t border-slate-200 dark:border-white/5 pt-6">
-										<h4 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center">
-											<Terminal className="w-3.5 h-3.5 mr-2 text-indigo-500" />
-											MCP Connection Guide
-										</h4>
-										<p className="text-xs text-slate-500 dark:text-slate-400">
-											Configure your local Model Context Protocol client
-											(Cursor, Claude Desktop, etc.) to use your Gmail
-											integration directly.
-										</p>
+									{/* Render Dynamic Gmail Tool Inputs */}
+									{ACTION_PARAMS_CONFIG[gmailSelectedAction] &&
+										ACTION_PARAMS_CONFIG[gmailSelectedAction].length > 0 && (
+											<div className="space-y-3 p-4 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-slate-950/20">
+												{ACTION_PARAMS_CONFIG[gmailSelectedAction].map(
+													(field) => (
+														<div
+															key={field.key}
+															className="space-y-1">
+															<label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+																{field.label}
+															</label>
+															{field.type === "textarea" ?
+																<textarea
+																	placeholder={
+																		field.placeholder
+																	}
+																	value={
+																		gmailActionParams[
+																			field.key
+																		] || ""
+																	}
+																	onChange={(e) =>
+																		setGmailActionParams(
+																			(prev) => ({
+																				...prev,
+																				[field.key]:
+																					e.target.value,
+																			}),
+																		)
+																	}
+																	className="w-full min-h-[60px] p-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500"
+																/>
+															:	<input
+																	type={field.type}
+																	placeholder={
+																		field.placeholder
+																	}
+																	value={
+																		gmailActionParams[
+																			field.key
+																		] || ""
+																	}
+																	onChange={(e) =>
+																		setGmailActionParams(
+																			(prev) => ({
+																				...prev,
+																				[field.key]:
+																					e.target.value,
+																			}),
+																		)
+																	}
+																	className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500"
+																/>
+															}
+														</div>
+													),
+												)}
+											</div>
+										)}
 
-										<div className="relative group">
-											<pre className="p-4 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-950/40 text-[10px] font-mono text-slate-800 dark:text-slate-300 overflow-x-auto leading-relaxed">
-												{`{
+									{/* Execute Gmail Action Button */}
+									<button
+										onClick={async () => {
+											if (!user) return;
+											setGmailActionExecuting(true);
+											setGmailActionError(null);
+											setGmailActionResult(null);
+											try {
+												const res = await fetch(
+													"/api/gmail/action",
+													{
+														method: "POST",
+														headers: {
+															"Content-Type":
+																"application/json",
+															"x-user-id": user.id,
+														},
+														body: JSON.stringify({
+															action: gmailSelectedAction,
+															params: gmailActionParams,
+														}),
+													},
+												);
+												const data = await res.json();
+												if (data.error) {
+													setGmailActionError(data.error);
+												} else {
+													setGmailActionResult(data);
+												}
+											} catch (err) {
+												setGmailActionError(
+													"Network request failed",
+												);
+											} finally {
+												setGmailActionExecuting(false);
+											}
+										}}
+										disabled={gmailActionExecuting}
+										className="w-full h-9 inline-flex items-center justify-center text-xs font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-all cursor-pointer">
+										{gmailActionExecuting ?
+											<Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />
+										:	<Play className="w-3 h-3 mr-2" />}
+										Run Action
+									</button>
+
+									{/* Gmail Action Error */}
+									{gmailActionError && (
+										<div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center space-x-2">
+											<AlertTriangle className="w-4 h-4 flex-shrink-0" />
+											<span>{gmailActionError}</span>
+										</div>
+									)}
+
+									{/* Gmail Action Result */}
+									{gmailActionResult && (
+										<div className="space-y-2">
+											<label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+												Execution Result
+											</label>
+											<pre className="p-4 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-950/40 text-[10px] font-mono text-slate-800 dark:text-slate-300 overflow-x-auto max-h-[250px] leading-relaxed overflow-y-auto">
+												{JSON.stringify(
+													gmailActionResult,
+													null,
+													2,
+												)}
+											</pre>
+										</div>
+									)}
+								</div>
+
+								{/* Interactive Inbox Console */}
+								<div className="space-y-4 border-t border-slate-200 dark:border-white/5 pt-6">
+									<h4 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center">
+										<Mail className="w-3.5 h-3.5 mr-2 text-red-500" />
+										Interactive Inbox Console
+									</h4>
+									<p className="text-xs text-slate-500 dark:text-slate-400">
+										Live interactive view of your Gmail inbox.
+									</p>
+
+									{/* Filter Toggle Tabs */}
+									{connectedPlatforms.gmail && (
+										<div className="flex space-x-1 p-1 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5 w-fit">
+											<button
+												onClick={() => setGmailFilter("all")}
+												className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+													gmailFilter === "all"
+														? "bg-white dark:bg-white/10 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200 dark:border-white/10"
+														: "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+												}`}>
+												All Recent
+											</button>
+											<button
+												onClick={() => setGmailFilter("unread")}
+												className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+													gmailFilter === "unread"
+														? "bg-white dark:bg-white/10 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200 dark:border-white/10"
+														: "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+												}`}>
+												Unread Only
+											</button>
+										</div>
+									)}
+
+									{!connectedPlatforms.gmail ?
+										<div className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900/40 text-center">
+											<span className="text-xs text-slate-500 dark:text-slate-400">
+												Please connect your Gmail account to enable this
+												console.
+											</span>
+										</div>
+									: gmailLoading ?
+										<div className="flex items-center justify-center p-8 space-x-2">
+											<Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+											<span className="text-xs text-slate-400">
+												Fetching live inbox...
+											</span>
+										</div>
+									: gmailError ?
+										<div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-start space-x-2">
+											<AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+											<div className="space-y-1">
+												<span className="block">{gmailError}</span>
+												{gmailError.includes("reconnect") && (
+													<span className="text-[10px] text-rose-500/70 dark:text-rose-400/60 block">
+														Go back and click Disconnect, then Connect again to re-authorize.
+													</span>
+												)}
+											</div>
+										</div>
+									: gmailEmails.length === 0 ?
+										<div className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900/40 text-center">
+											<span className="text-xs text-slate-500 dark:text-slate-400">
+												{gmailFilter === "unread"
+													? "No unread emails found. Switch to \"All Recent\" to see your inbox."
+													: "No emails found in your inbox."}
+											</span>
+										</div>
+									:	<div className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden divide-y divide-slate-200 dark:divide-white/10 max-h-[250px] overflow-y-auto">
+											{gmailEmails.map((email) => (
+												<div
+													key={email.id}
+													className="p-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors space-y-1 bg-white dark:bg-slate-950/40 text-left">
+													<div className="flex items-center justify-between text-xs">
+														<span className="font-semibold text-slate-900 dark:text-white truncate max-w-[200px]">
+															{email.from}
+														</span>
+														<span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+															{new Date(
+																email.timestamp * 1000,
+															).toLocaleTimeString([], {
+																hour: "2-digit",
+																minute: "2-digit",
+															})}
+														</span>
+													</div>
+													<div className="text-xs font-medium text-indigo-600 dark:text-indigo-400 truncate">
+														{email.subject}
+													</div>
+													<p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+														{email.snippet}
+													</p>
+												</div>
+											))}
+										</div>
+									}
+								</div>
+
+								{/* MCP Connection Guide */}
+								<div className="space-y-4 border-t border-slate-200 dark:border-white/5 pt-6">
+									<h4 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center">
+										<Terminal className="w-3.5 h-3.5 mr-2 text-indigo-500" />
+										MCP Connection Guide
+									</h4>
+									<p className="text-xs text-slate-500 dark:text-slate-400">
+										Configure your local Model Context Protocol client
+										(Cursor, Claude Desktop, etc.) to use your Gmail
+										integration directly.
+									</p>
+
+									<div className="relative group">
+										<pre className="p-4 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-950/40 text-[10px] font-mono text-slate-800 dark:text-slate-300 overflow-x-auto leading-relaxed">
+											{`{
   "mcpServers": {
     "gmail": {
       "command": "npx",
@@ -1429,47 +1740,47 @@ function IntegrationsContent() {
     }
   }
 }`}
-											</pre>
-											<button
-												onClick={() => {
-													const configStr = JSON.stringify(
-														{
-															mcpServers: {
-																gmail: {
-																	command: "npx",
-																	args: ["-y", "gmail-mcp"],
-																	env: {
-																		GOOGLE_CLIENT_ID:
-																			"341616289505-7th9ide0lfctrf9cd7okcrjm4gopkglc.apps.googleusercontent.com",
-																		GOOGLE_CLIENT_SECRET:
-																			"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",
-																	},
+										</pre>
+										<button
+											onClick={() => {
+												const configStr = JSON.stringify(
+													{
+														mcpServers: {
+															gmail: {
+																command: "npx",
+																args: ["-y", "gmail-mcp"],
+																env: {
+																	GOOGLE_CLIENT_ID:
+																		"341616289505-7th9ide0lfctrf9cd7okcrjm4gopkglc.apps.googleusercontent.com",
+																	GOOGLE_CLIENT_SECRET:
+																		"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",
 																},
 															},
 														},
-														null,
-														2,
-													);
-													navigator.clipboard.writeText(configStr);
-													setCopiedMcpConfig(true);
-													setTimeout(() => setCopiedMcpConfig(false), 2000);
-												}}
-												className="absolute top-3 right-3 px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-300 dark:border-white/10 text-[10px] text-slate-600 dark:text-slate-300 transition-all font-semibold flex items-center space-x-1 cursor-pointer">
-												{copiedMcpConfig ?
-													<>
-														<Check className="w-3 h-3 text-emerald-500" />
-														<span>Copied!</span>
-													</>
-												:	<>
-														<Copy className="w-3 h-3" />
-														<span>Copy</span>
-													</>
-												}
-											</button>
-										</div>
+													},
+													null,
+													2,
+												);
+												navigator.clipboard.writeText(configStr);
+												setCopiedMcpConfig(true);
+												setTimeout(() => setCopiedMcpConfig(false), 2000);
+											}}
+											className="absolute top-3 right-3 px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-300 dark:border-white/10 text-[10px] text-slate-600 dark:text-slate-300 transition-all font-semibold flex items-center space-x-1 cursor-pointer">
+											{copiedMcpConfig ?
+												<>
+													<Check className="w-3 h-3 text-emerald-500" />
+													<span>Copied!</span>
+												</>
+											:	<>
+													<Copy className="w-3 h-3" />
+													<span>Copy</span>
+												</>
+											}
+										</button>
 									</div>
 								</div>
-							)}
+							</div>
+						)}
 						</div>
 
 						{/* Footer */}
