@@ -1,38 +1,40 @@
 {
-  "name": "personal_aiagent",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "@google/genai": "^2.10.0",
-    "@insforge/mcp": "^1.2.11",
-    "@insforge/sdk": "^1.4.3",
-    "@sentdm/sentdm": "^0.30.0",
-    "@trigger.dev/sdk": "4.4.6",
-    "@whiskeysockets/baileys": "^7.0.0-rc13",
-    "jimp": "^1.6.1",
-    "lucide-react": "^1.22.0",
-    "next": "16.2.9",
-    "openai": "^6.45.0",
-    "pino": "^10.3.1",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.9",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+	"name": "personal_aiagent",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"dev": "next dev",
+		"build": "next build",
+		"start": "next start",
+		"lint": "eslint"
+	},
+	"dependencies": {
+		"@google/genai": "^2.10.0",
+		"@insforge/mcp": "^1.2.11",
+		"@insforge/sdk": "^1.4.3",
+		"@trigger.dev/sdk": "4.4.6",
+		"@whiskeysockets/baileys": "^7.0.0-rc13",
+		"jimp": "^1.6.1",
+		"lucide-react": "^1.22.0",
+		"next": "^16.2.10",
+		"openai": "^6.45.0",
+		"pino": "^10.3.1",
+		"react": "19.2.4",
+		"react-dom": "19.2.4",
+		"react-markdown": "^10.1.0",
+		"remark-gfm": "^4.0.1",
+		"sharp": "^0.35.3",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@tailwindcss/postcss": "^4",
+		"@types/node": "^20",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"eslint": "^9",
+		"eslint-config-next": "16.2.9",
+		"tailwindcss": "^4",
+		"typescript": "^5"
+	},
+	"packageManager": "yarn@4.17.0"
 }
